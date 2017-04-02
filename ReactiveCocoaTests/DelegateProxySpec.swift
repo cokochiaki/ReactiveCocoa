@@ -237,7 +237,7 @@ class DelegateProxySpec: QuickSpec {
 					                                  getter: #selector(getter: object.delegate))
 				}
 
-				it("should be automatically set as the object's delegate even if it has already been isa-swizzled by KVO") {
+				it("should be automatically set as the object's delegate even if it has already been isa-swizzled by KVO.") {
 					_ = object.reactive.producer(forKeyPath: #keyPath(Object.delegateSetCount)).start()
 					expect(object.delegate).to(beNil())
 
@@ -248,12 +248,58 @@ class DelegateProxySpec: QuickSpec {
 					expect(object.delegate).to(beIdenticalTo(proxy))
 				}
 
-				it("should be automatically set as the object's delegate even if it has already been isa-swizzled by RAC") {
+				it("should be automatically set as the object's delegate even if it has already been isa-swizzled by RAC.") {
 					_ = object.reactive.trigger(for: #selector(getter: Object.delegateSetCount))
 					expect(object.delegate).to(beNil())
 
 					setProxy()
 					expect(object.delegate).to(beIdenticalTo(proxy))
+
+					object.delegate = nil
+					expect(object.delegate).to(beIdenticalTo(proxy))
+				}
+
+				it("should be automatically set as the object's delegate even if it has already been isa-swizzled by RAC for intercepting the delegate setter.") {
+					_ = object.reactive.trigger(for: #selector(setter: Object.delegate))
+					expect(object.delegate).to(beNil())
+
+					setProxy()
+					expect(object.delegate).to(beIdenticalTo(proxy))
+
+					object.delegate = nil
+					expect(object.delegate).to(beIdenticalTo(proxy))
+				}
+
+				it("should be automatically set as the object's delegate even if it is subsequently isa-swizzled by RAC for intercepting the delegate setter.") {
+					expect(object.delegate).to(beNil())
+
+					setProxy()
+					expect(object.delegate).to(beIdenticalTo(proxy))
+
+					_ = object.reactive.trigger(for: #selector(setter: Object.delegate))
+
+					object.delegate = nil
+					expect(object.delegate).to(beIdenticalTo(proxy))
+				}
+
+				it("should be automatically set as the object's delegate even if it has already been isa-swizzled by KVO for observing the delegate key path.") {
+					object.reactive.producer(forKeyPath: #keyPath(Object.delegate)).start()
+					expect(object.delegate).to(beNil())
+
+					setProxy()
+					expect(object.delegate).to(beIdenticalTo(proxy))
+
+					object.delegate = nil
+					expect(object.delegate).to(beIdenticalTo(proxy))
+				}
+
+				it("should be automatically set as the object's delegate even if it is subsequently isa-swizzled by KVO for observing the delegate key path.") {
+					expect(object.delegate).to(beNil())
+
+					setProxy()
+					expect(object.delegate).to(beIdenticalTo(proxy))
+
+					object.reactive.producer(forKeyPath: #keyPath(Object.delegate)).start()
 
 					object.delegate = nil
 					expect(object.delegate).to(beIdenticalTo(proxy))
