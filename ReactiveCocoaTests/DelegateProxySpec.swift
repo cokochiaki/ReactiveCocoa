@@ -14,7 +14,7 @@ class Object: NSObject {
 	var delegateSetCount = 0
 	var delegateSelectors: [Selector] = []
 
-	weak var delegate: ObjectDelegate? {
+	dynamic weak var delegate: ObjectDelegate? {
 		didSet {
 			delegateSetCount += 1
 			delegateSelectors = Array()
@@ -84,6 +84,17 @@ class DelegateProxySpec: QuickSpec {
 
 			it("should be automatically set as the object's delegate.") {
 				expect(object.delegate).to(beIdenticalTo(proxy))
+			}
+
+			it("should not be erased when the delegate is set with a new one.") {
+				object.delegate = nil
+				expect(object.delegate).to(beIdenticalTo(proxy))
+				expect(proxy.forwardee).to(beNil())
+
+				let counter = ObjectDelegateCounter()
+				object.delegate = counter
+				expect(object.delegate).to(beIdenticalTo(proxy))
+				expect(proxy.forwardee).to(beIdenticalTo(counter))
 			}
 
 			it("should respond to the protocol requirement checks.") {
@@ -210,6 +221,43 @@ class DelegateProxySpec: QuickSpec {
 				expect(object.delegateSetCount) == 3
 				expect(object.delegateSelectors) == [#selector(ObjectDelegate.foo), #selector(ObjectDelegate.bar)]
 				expect(object.delegate).to(beIdenticalTo(proxy))
+			}
+			
+			describe("interoperability") {
+				var object: Object!
+				var proxy: DelegateProxy<ObjectDelegate>!
+				
+				beforeEach {
+					object = Object()
+				}
+
+				func setProxy() {
+					proxy = ObjectDelegateProxy.proxy(for: object,
+					                                  setter: #selector(setter: object.delegate),
+					                                  getter: #selector(getter: object.delegate))
+				}
+
+				it("should be automatically set as the object's delegate even if it has already been isa-swizzled by KVO") {
+					_ = object.reactive.producer(forKeyPath: #keyPath(Object.delegateSetCount)).start()
+					expect(object.delegate).to(beNil())
+
+					setProxy()
+					expect(object.delegate).to(beIdenticalTo(proxy))
+
+					object.delegate = nil
+					expect(object.delegate).to(beIdenticalTo(proxy))
+				}
+
+				it("should be automatically set as the object's delegate even if it has already been isa-swizzled by RAC") {
+					_ = object.reactive.trigger(for: #selector(getter: Object.delegateSetCount))
+					expect(object.delegate).to(beNil())
+
+					setProxy()
+					expect(object.delegate).to(beIdenticalTo(proxy))
+
+					object.delegate = nil
+					expect(object.delegate).to(beIdenticalTo(proxy))
+				}
 			}
 		}
 	}
