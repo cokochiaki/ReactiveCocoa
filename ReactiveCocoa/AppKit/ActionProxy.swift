@@ -49,13 +49,25 @@ extension Reactive where Base: NSObject, Base: ActionMessageSending {
 			proxy.action = base.action
 
 			let newTargetSetterImpl: @convention(block) (NSObject, AnyObject?) -> Void = { object, target in
-				let proxy = object.associations.value(forKey: key)!
-				proxy.target = target
+				if let proxy = object.associations.value(forKey: key) {
+					proxy.target = target
+				} else {
+					typealias Setter = @convention(c) (NSObject, Selector, AnyObject?) -> Void
+					let impl = class_getMethodImplementation(object.objcClass, #selector(setter: ActionMessageSending.target))
+					let targetSetter = unsafeBitCast(impl, to: Setter.self)
+					targetSetter(object, #selector(setter: ActionMessageSending.target), target)
+				}
 			}
 
 			let newActionSetterImpl: @convention(block) (NSObject, Selector?) -> Void = { object, selector in
-				let proxy = object.associations.value(forKey: key)!
-				proxy.action = selector
+				if let proxy = object.associations.value(forKey: key) {
+					proxy.action = selector
+				} else {
+					typealias Setter = @convention(c) (NSObject, Selector, Selector?) -> Void
+					let impl = class_getMethodImplementation(object.objcClass, #selector(setter: ActionMessageSending.target))
+					let actionSetter = unsafeBitCast(impl, to: Setter.self)
+					actionSetter(object, #selector(setter: ActionMessageSending.target), selector)
+				}
 			}
 
 			// Swizzle the instance only after setting up the proxy.
