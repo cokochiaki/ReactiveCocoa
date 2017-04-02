@@ -1,0 +1,213 @@
+import Quick
+import Nimble
+import enum Result.NoError
+import ReactiveSwift
+@testable import ReactiveCocoa
+
+private class Object: NSObject, ActionMessageSending {
+	dynamic var objectValue: AnyObject? = nil
+
+	dynamic weak var target: AnyObject?
+	dynamic var action: Selector?
+
+	deinit {
+		target = nil
+		action = nil
+	}
+}
+
+private class Receiver: NSObject {
+	var counter = 0
+
+	func foo() {
+		counter += 1
+	}
+}
+
+class ActionProxySpec: QuickSpec {
+	override func spec() {
+		describe("DelegateProxy") {
+			var object: Object!
+			var proxy: ActionProxy<Object>!
+
+			beforeEach {
+				object = Object()
+				proxy = object.reactive.proxy
+			}
+
+			afterEach {
+				weak var weakObject = object
+
+				object = nil
+				expect(weakObject).to(beNil())
+			}
+
+			func sendMessage() {
+				_ = object.action.map { object.target?.perform($0, with: nil) }
+			}
+
+			it("should be automatically set as the object's delegate.") {
+				expect(object.target).to(beIdenticalTo(proxy))
+				expect(object.action) == #selector(proxy.invoke(_:))
+			}
+
+			it("should not be erased when the delegate is set with a new one.") {
+				object.target = nil
+				object.action = nil
+
+				expect(object.target).to(beIdenticalTo(proxy))
+				expect(object.action) == #selector(proxy.invoke(_:))
+
+				expect(proxy.target).to(beNil())
+				expect(proxy.action).to(beNil())
+
+				let counter = Receiver()
+				object.target = counter
+				object.action = #selector(counter.foo)
+
+				expect(object.target).to(beIdenticalTo(proxy))
+				expect(object.action) == #selector(proxy.invoke(_:))
+
+				expect(proxy.target).to(beIdenticalTo(counter))
+				expect(proxy.action) == #selector(counter.foo)
+			}
+
+			it("should complete its signals when the object deinitializes") {
+				var isCompleted = false
+				proxy.invoked.observeCompleted { isCompleted = true }
+
+				expect(isCompleted) == false
+
+				object = nil
+				expect(isCompleted) == true
+			}
+
+			it("should interrupt the observers if the object has already deinitialized") {
+				object = nil
+
+				var isInterrupted = false
+				proxy.invoked.observeInterrupted { isInterrupted = true }
+
+				expect(isInterrupted) == true
+			}
+
+			it("should emit a `value` event whenever an action message is sent.") {
+				var fooCount = 0
+				proxy.invoked.observeValues { _ in fooCount += 1 }
+
+				expect(fooCount) == 0
+
+				sendMessage()
+				expect(fooCount) == 1
+
+				sendMessage()
+				expect(fooCount) == 2
+			}
+
+			it("should pass through the action message to the forwardee.") {
+				let receiver = Receiver()
+				proxy.target = receiver
+				proxy.action = #selector(receiver.foo)
+
+				var fooCount = 0
+				proxy.invoked.observeValues { _ in fooCount += 1 }
+
+				expect(fooCount) == 0
+				expect(receiver.counter) == 0
+
+				sendMessage()
+				expect(fooCount) == 1
+				expect(receiver.counter) == 1
+
+				sendMessage()
+				expect(fooCount) == 2
+				expect(receiver.counter) == 2
+			}
+
+			describe("interoperability") {
+				var object: Object!
+				var proxy: ActionProxy<Object>!
+
+				beforeEach {
+					object = Object()
+				}
+
+				func setProxy() {
+					proxy = object.reactive.proxy
+				}
+
+				func sendMessage() {
+					_ = object.action.map { NSApp.sendAction($0, to: object.target, from: self) }
+				}
+
+				it("should be automatically set as the object's delegate even if it has already been isa-swizzled by KVO.") {
+					_ = object.reactive.producer(forKeyPath: #keyPath(Object.objectValue)).start()
+					expect(object.target).to(beNil())
+
+					setProxy()
+					expect(object.target).to(beIdenticalTo(proxy))
+
+					object.target = nil
+					expect(object.target).to(beIdenticalTo(proxy))
+				}
+
+				it("should be automatically set as the object's delegate even if it has already been isa-swizzled by RAC.") {
+					_ = object.reactive.trigger(for: #selector(getter: Object.objectValue))
+					expect(object.target).to(beNil())
+
+					setProxy()
+					expect(object.target).to(beIdenticalTo(proxy))
+
+					object.target = nil
+					expect(object.target).to(beIdenticalTo(proxy))
+				}
+
+				it("should be automatically set as the object's delegate even if it has already been isa-swizzled by RAC for intercepting the delegate setter.") {
+					_ = object.reactive.trigger(for: #selector(setter: Object.target))
+					expect(object.target).to(beNil())
+
+					setProxy()
+					expect(object.target).to(beIdenticalTo(proxy))
+
+					object.target = nil
+					expect(object.target).to(beIdenticalTo(proxy))
+				}
+
+				it("should be automatically set as the object's delegate even if it is subsequently isa-swizzled by RAC for intercepting the delegate setter.") {
+					expect(object.target).to(beNil())
+
+					setProxy()
+					expect(object.target).to(beIdenticalTo(proxy))
+
+					_ = object.reactive.trigger(for: #selector(setter: Object.target))
+
+					object.target = nil
+					expect(object.target).to(beIdenticalTo(proxy))
+				}
+
+				it("should be automatically set as the object's delegate even if it has already been isa-swizzled by KVO for observing the delegate key path.") {
+					object.reactive.producer(forKeyPath: #keyPath(Object.target)).start()
+					expect(object.target).to(beNil())
+
+					setProxy()
+					expect(object.target).to(beIdenticalTo(proxy))
+
+					object.target = nil
+					expect(object.target).to(beIdenticalTo(proxy))
+				}
+
+				it("should be automatically set as the object's delegate even if it is subsequently isa-swizzled by KVO for observing the delegate key path.") {
+					expect(object.target).to(beNil())
+
+					setProxy()
+					expect(object.target).to(beIdenticalTo(proxy))
+					
+					object.reactive.producer(forKeyPath: #keyPath(Object.target)).start()
+					
+					object.target = nil
+					expect(object.target).to(beIdenticalTo(proxy))
+				}
+			}
+		}
+	}
+}

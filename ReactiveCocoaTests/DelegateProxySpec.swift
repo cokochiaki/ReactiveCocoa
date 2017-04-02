@@ -4,13 +4,13 @@ import enum Result.NoError
 import ReactiveSwift
 @testable import ReactiveCocoa
 
-@objc protocol ObjectDelegate: NSObjectProtocol {
+@objc private protocol ObjectDelegate: NSObjectProtocol {
 	func foo()
 	@objc optional func bar()
 	@objc optional func nop()
 }
 
-class Object: NSObject {
+private class Object: NSObject {
 	var delegateSetCount = 0
 	var delegateSelectors: [Selector] = []
 
@@ -39,7 +39,7 @@ class Object: NSObject {
 	}
 }
 
-class ObjectDelegateCounter: NSObject, ObjectDelegate {
+private class ObjectDelegateCounter: NSObject, ObjectDelegate {
 	var fooCounter = 0
 	var nopCounter = 0
 
@@ -52,7 +52,7 @@ class ObjectDelegateCounter: NSObject, ObjectDelegate {
 	}
 }
 
-class ObjectDelegateProxy: DelegateProxy<ObjectDelegate>, ObjectDelegate {
+private class ObjectDelegateProxy: DelegateProxy<ObjectDelegate>, ObjectDelegate {
 	func foo() {
 		forwardee?.foo()
 	}
